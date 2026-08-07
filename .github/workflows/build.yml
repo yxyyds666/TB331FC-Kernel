@@ -1,0 +1,82 @@
+name: Build GKI 5.15 + KernelSU
+
+# 每次 push 到 main 触发, 也可手动触发
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  # 谷歌官方 GKI 5.15 tag — 与设备原版内核 config.gz 的 5.15.167 对应
+  GKI_TAG: android13-5.15.167_r00
+  # KernelSU 版本 — v3.x 起已弃用 GKI image 集成, 固定使用 v2.1.2
+  KSU_TAG: v2.1.2
+  # clang 17.0.4 (LLVM 官方 release, 与 GKI 5.15 官方构建的 clang 17 同代)
+  CLANG_URL: https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.4/clang+llvm-17.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git curl build-essential libssl-dev libelf-dev \
+            flex bison libncurses-dev dwarves python3
+
+      - name: Download clang 17 (LLVM)
+        run: |
+          curl -LSs -o clang.tar.xz "${CLANG_URL}"
+          mkdir -p clang && tar -xJf clang.tar.xz -C clang --strip-components=1
+          echo "${{ github.workspace }}/clang/bin" >> "$GITHUB_PATH"
+
+      - name: Clone Google GKI kernel source
+        run: |
+          git clone --depth 1 -b "${GKI_TAG}" \
+            https://android.googlesource.com/kernel/common kernel
+
+      # 必须先集成 KernelSU 再 olddefconfig, 否则 CONFIG_KSU 符号不会进入 .config
+      - name: Integrate KernelSU
+        run: |
+          cd kernel
+          curl -LSs -o setup.sh \
+            "https://raw.githubusercontent.com/tiann/KernelSU/${KSU_TAG}/kernel/setup.sh"
+          bash setup.sh "${KSU_TAG}"
+          grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig
+          echo "[+] KernelSU 集成完成"
+
+      - name: Apply device config (config.gz -> .config)
+        run: |
+          gzip -dc "${{ github.workspace }}/config.gz" > kernel/.config
+          cd kernel
+          make ARCH=arm64 LLVM=1 olddefconfig
+          grep -E "^CONFIG_KSU=|^CONFIG_OVERLAY_FS=|^CONFIG_KALLSYMS=" .config || true
+          # 保险: 若 CONFIG_KSU 未开启则强制开启
+          grep -q "^CONFIG_KSU=y" .config || {
+            ./scripts/config --enable KSU
+            make ARCH=arm64 LLVM=1 olddefconfig
+          }
+
+      - name: Build kernel Image
+        run: |
+          cd kernel
+          make ARCH=arm64 LLVM=1 -j"$(nproc)" Image
+
+      - name: Repack boot.img
+        run: |
+          python3 scripts/repack.py \
+            --input boot_a.img \
+            --kernel kernel/arch/arm64/boot/Image \
+            --output boot.img
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tb331fc-boot-ksu
+          path: |
+            boot.img
+            kernel/arch/arm64/boot/Image
+            kernel/.config
+          retention-days: 30
