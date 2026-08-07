@@ -52,12 +52,21 @@ jobs:
           gzip -dc "${{ github.workspace }}/config.gz" > kernel/.config
           cd kernel
           make ARCH=arm64 LLVM=1 olddefconfig
-          grep -E "^CONFIG_KSU=|^CONFIG_OVERLAY_FS=|^CONFIG_KALLSYMS=" .config || true
+          # 清除厂商构建机环境依赖 (纯 GKI 构建无需):
+          # 1. abi_symbollist.raw 是联想构建机的绝对路径, 必须删除否则构建失败
+          ./scripts/config --undefine UNUSED_KSYMS_WHITELIST
+          # 2. 无 whitelist 的 trim 会移除 vendor 模块依赖的导出符号
+          ./scripts/config --undefine TRIM_UNUSED_KSYMS
+          # 3. Full LTO 在 16GB runner 上易 OOM, 改用官方 GKI 同款 thin LTO
+          ./scripts/config --undefine LTO_CLANG_FULL
+          ./scripts/config --enable LTO_CLANG_THIN
+          make ARCH=arm64 LLVM=1 olddefconfig
           # 保险: 若 CONFIG_KSU 未开启则强制开启
           grep -q "^CONFIG_KSU=y" .config || {
             ./scripts/config --enable KSU
             make ARCH=arm64 LLVM=1 olddefconfig
           }
+          grep -E "^CONFIG_KSU=|^CONFIG_KALLSYMS=|^CONFIG_TRIM_UNUSED_KSYMS=|^CONFIG_LTO_CLANG" .config
 
       - name: Build kernel Image
         run: |
