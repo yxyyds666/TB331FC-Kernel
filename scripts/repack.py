@@ -3,10 +3,12 @@
 TB331FC boot.img 重打包脚本
 
 从原版 boot_a.img(header v4, 无 ramdisk)复制头部并更新 kernel_size,
-将内核段替换为新编译的 Image,输出可 fastboot 刷写的 boot.img。
+将内核段替换为新编译的 Image,可选融合 vendor ramdisk,
+输出可 fastboot 刷写/临时引导的 boot.img。
 
 用法:
-    python3 repack.py --input boot_a.img --kernel arch/arm64/boot/Image --output boot.img
+    python3 repack.py --input boot_a.img --kernel arch/arm64/boot/Image \
+        [--vendor-ramdisk vendor_ramdisk.gz] --output boot.img
 """
 import argparse
 import struct
@@ -14,16 +16,27 @@ from pathlib import Path
 
 PAGE_SIZE = 4096
 
+# v4 header: vendor_ramdisk_size 位于 header 末尾 (boot_img_hdr_v4 在
+# boot_img_hdr_v3 之后追加 4 字节), 其偏移 = header_size - 4
+V4_VENDOR_RAMDISK_OFFSET = 1580
+
+
+def align_page(n: int) -> int:
+    return (n + PAGE_SIZE - 1) // PAGE_SIZE * PAGE_SIZE
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="重打包 GKI boot.img (header v4)")
     ap.add_argument("--input", required=True, help="原版 boot 镜像 (如 boot_a.img)")
     ap.add_argument("--kernel", required=True, help="新编译的内核 Image")
+    ap.add_argument("--vendor-ramdisk", default=None,
+                    help="vendor ramdisk (gzip cpio), 融合进 boot.img 供临时引导使用")
     ap.add_argument("--output", required=True, help="输出 boot.img")
     args = ap.parse_args()
 
     orig = Path(args.input).read_bytes()
     kernel = Path(args.kernel).read_bytes()
+    vram = Path(args.vendor_ramdisk).read_bytes() if args.vendor_ramdisk else None
 
     if orig[:8] != b"ANDROID!":
         raise SystemExit(f"[ERROR] {args.input} 不是有效的 Android boot 镜像")
@@ -46,13 +59,25 @@ def main() -> None:
     out = bytearray(PAGE_SIZE)
     out[:header_size] = header
     out += kernel
+    out += b"\x00" * (align_page(len(out)) - len(out))  # kernel 段页对齐
 
-    pad = (PAGE_SIZE - (len(out) % PAGE_SIZE)) % PAGE_SIZE
-    out += b"\x00" * pad
+    # 可选: 融合 vendor ramdisk (v4: 位于 kernel 之后, 头部记录大小)
+    if vram:
+        if len(out) + len(vram) > 100 * 1024 * 1024:
+            raise SystemExit(f"[ERROR] 融合后镜像 ({len(out)+len(vram)}B) 超出 "
+                             "boot 分区大小 (96MB)")
+        struct.pack_into("<I", header, V4_VENDOR_RAMDISK_OFFSET, len(vram))
+        out[:header_size] = header
+        out += vram
+        out += b"\x00" * (align_page(len(out)) - len(out))
+        print(f"[+] 已融合 vendor ramdisk: {len(vram)}B")
+    else:
+        print("[!] 未提供 vendor ramdisk, 仅包含内核")
 
     Path(args.output).write_bytes(out)
     print(f"[+] 已生成 {args.output} ({len(out)}B)")
-    print(f"[+] kernel_size 已更新: {len(kernel)}B")
+    print(f"[+] kernel_size={len(kernel)}B, vendor_ramdisk_size="
+          f"{struct.unpack_from('<I', header, V4_VENDOR_RAMDISK_OFFSET)[0]}B")
 
 
 if __name__ == "__main__":
