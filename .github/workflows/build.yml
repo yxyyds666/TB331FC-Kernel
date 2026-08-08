@@ -87,7 +87,20 @@ jobs:
             ./scripts/config --enable KSU_SUSFS
             make ARCH=arm64 LLVM=1 olddefconfig
           }
-          grep -E "^CONFIG_KSU=|^CONFIG_KSU_SUSFS=|^CONFIG_KALLSYMS=|^CONFIG_TRIM_UNUSED_KSYMS=|^CONFIG_LTO_CLANG" .config
+          # === 性能优化 (针对厂商工程配置) ===
+          # 1. KASAN: 内存错误检测器, 20-50% 性能损失, 量产内核必须关闭
+          ./scripts/config --disable KASAN
+          # 2. UBSAN: 未定义行为检测, 额外运行时开销
+          ./scripts/config --disable UBSAN
+          # 3. SLUB_DEBUG: slub 分配器调试, 内存与性能开销
+          ./scripts/config --disable SLUB_DEBUG
+          # 4. HZ 250 -> 1000: 调度 tick 更密, 交互/游戏更跟手
+          ./scripts/config --disable HZ_250
+          ./scripts/config --enable HZ_1000
+          ./scripts/config --set-val HZ 1000
+          make ARCH=arm64 LLVM=1 olddefconfig
+          # 验证关键项
+          grep -E "^CONFIG_KSU=|^CONFIG_KSU_SUSFS=|^CONFIG_KALLSYMS=|^CONFIG_KASAN=|^CONFIG_UBSAN=|^CONFIG_HZ=" .config
 
       - name: Build kernel Image
         run: |

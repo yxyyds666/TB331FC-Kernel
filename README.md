@@ -14,10 +14,27 @@
 ## 编译流程 (push 自动触发)
 
 1. 拉取谷歌官方 GKI 源码 `android13-5.15.167_r00` (与设备内核版本一致, KMI 兼容)
-2. 集成 KernelSU `v3.2.5` (KSU_VERSION≈32513, 兼容最新 Manager)
+2. 集成 KernelSU `v3.2.5` (KSU_VERSION≈32513, 兼容最新 Manager 32525)
 3. 集成 SusFS `gki-android13-5.15` 分支 (root 隐藏补丁, 与 KernelSU main 同步维护)
-4. 应用设备配置 `config.gz` → `make LLVM=1` (clang 17) 编译
-5. 用 `scripts/repack.py` 重打包 `boot.img` 并上传 artifact
+4. 应用设备配置 `config.gz` + 性能优化 (关闭厂商工程调试项, 见下)
+5. `make LLVM=1` (clang 17) 编译 → `scripts/repack.py` 重打包 `boot.img` 上传 artifact
+
+## 性能优化项
+
+基于厂商工程配置 (config.gz) 的针对性优化:
+
+| 优化 | 说明 |
+|---|---|
+| 关闭 `CONFIG_KASAN` | 内存错误检测器, 20-50% 性能损失, 量产必须关 |
+| 关闭 `CONFIG_UBSAN` | 未定义行为检测, 运行时开销 |
+| 关闭 `CONFIG_SLUB_DEBUG` | slub 调试, 内存/性能开销 |
+| `HZ` 250 → 1000 | 调度 tick 更密, 交互/游戏更跟手 |
+| Full LTO → thin LTO | 官方 GKI 同款, 避免 CI 内存不足 |
+| 清除 whitelist/trim-ksyms | 移除厂商构建机绝对路径依赖 |
+
+## 说明
+
+- KPM (Kernel Patch Module) 在原版 KernelSU v3.x 中已移除 (仅 SukiSU 等 fork 保留); SusFS 的隐藏模块走普通 KSU 模块方式, 不依赖 KPM。
 
 ## 刷机
 
