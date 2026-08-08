@@ -14,9 +14,10 @@
 ## 编译流程 (push 自动触发)
 
 1. 拉取谷歌官方 GKI 源码 `android13-5.15.167_r00` (与设备内核版本一致, KMI 兼容)
-2. 集成 KernelSU `v2.1.2` (v3.x 起官方弃用 GKI image 集成, 故固定 v2.x)
-3. 应用设备配置 `config.gz` → `make LLVM=1` (clang 17) 编译
-4. 用 `scripts/repack.py` 重打包 `boot.img` 并上传 artifact
+2. 集成 KernelSU `v3.2.5` (KSU_VERSION≈32513, 兼容最新 Manager)
+3. 集成 SusFS `gki-android13-5.15` 分支 (root 隐藏补丁, 与 KernelSU main 同步维护)
+4. 应用设备配置 `config.gz` → `make LLVM=1` (clang 17) 编译
+5. 用 `scripts/repack.py` 重打包 `boot.img` 并上传 artifact
 
 ## 刷机
 
