@@ -70,8 +70,9 @@ jobs:
             https://gitlab.com/simonpunk/susfs4ksu susfs4ksu
           cp susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch KernelSU/
           cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch .
-          cp susfs4ksu/kernel_patches/fs/susfs.c fs/
-          cp susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/
+          # 整目录复制 (fs/ 含 susfs.c; include/linux/ 含 susfs.h + susfs_def.h)
+          cp -r susfs4ksu/kernel_patches/fs/. fs/
+          cp -r susfs4ksu/kernel_patches/include/linux/. include/linux/
           cd KernelSU && patch -p1 < 10_enable_susfs_for_ksu.patch && cd ..
           patch -p1 < 50_add_susfs_in_gki-android13-5.15.patch
           echo "[+] SusFS 集成完成"
