@@ -9,8 +9,10 @@ on:
 env:
   # 谷歌官方 GKI 5.15 tag — 与设备原版内核 config.gz 的 5.15.167 对应
   GKI_TAG: android13-5.15.167_r00
-  # KernelSU 最新稳定版 v3.2.5 (KSU_VERSION≈32513, 满足 Manager v32525 的 ≥32513 要求)
-  KSU_TAG: v3.2.5
+  # KernelSU main 分支: SusFS gki-android13-5.15 分支与之持续同步, 补丁完全匹配;
+  # KSU_VERSION=30000+git计数 (>32513), 满足 Manager v32525 要求。
+  # (v3.2.5 tag 与 SusFS 补丁有 hunk 漂移, 已实测 main 全绿)
+  KSU_TAG: main
   # SusFS 对应 GKI 5.15 的分支 (与 KernelSU 官方 main 持续同步)
   SUSFS_BRANCH: gki-android13-5.15
   # clang 17.0.4 (LLVM 官方 release, 与 GKI 5.15 官方构建的 clang 17 同代)
