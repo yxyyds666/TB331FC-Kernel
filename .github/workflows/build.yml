@@ -26,13 +26,23 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y git curl build-essential libssl-dev libelf-dev \
-            flex bison libncurses-dev dwarves python3
+            flex bison libncurses-dev dwarves python3 ccache
 
       - name: Download clang 17 (LLVM)
         run: |
           curl -LSs -o clang.tar.xz "${CLANG_URL}"
           mkdir -p clang && tar -xJf clang.tar.xz -C clang --strip-components=1
           echo "${{ github.workspace }}/clang/bin" >> "$GITHUB_PATH"
+
+      # ccache: 二次构建命中缓存, 大幅加速迭代 (首次构建无收益)
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ env.GKI_TAG }}-${{ env.KSU_TAG }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ env.GKI_TAG }}-${{ env.KSU_TAG }}-
+            ccache-${{ env.GKI_TAG }}-
 
       - name: Clone Google GKI kernel source
         run: |
@@ -98,14 +108,20 @@ jobs:
           ./scripts/config --disable HZ_250
           ./scripts/config --enable HZ_1000
           ./scripts/config --set-val HZ 1000
+          # 5. NR_CPUS 32 -> 8: bengal 仅 8 核, 减小 percpu 数组内存/cache 压力
+          ./scripts/config --set-val NR_CPUS 8
+          # 6. PREEMPT_DYNAMIC: 运行时可在 full/voluntary 抢占间切换
+          ./scripts/config --enable PREEMPT_DYNAMIC
           make ARCH=arm64 LLVM=1 olddefconfig
           # 验证关键项
-          grep -E "^CONFIG_KSU=|^CONFIG_KSU_SUSFS=|^CONFIG_KALLSYMS=|^CONFIG_KASAN=|^CONFIG_UBSAN=|^CONFIG_HZ=" .config
+          grep -E "^CONFIG_KSU=|^CONFIG_KSU_SUSFS=|^CONFIG_KALLSYMS=|^CONFIG_KASAN=|^CONFIG_UBSAN=|^CONFIG_HZ=|^CONFIG_NR_CPUS=|^CONFIG_PREEMPT_DYNAMIC=" .config
 
       - name: Build kernel Image
         run: |
+          ccache --max-size=6G
           cd kernel
-          make ARCH=arm64 LLVM=1 -j"$(nproc)" Image
+          make ARCH=arm64 LLVM=1 CC="ccache clang" HOSTCC="ccache gcc" \
+            -j"$(nproc)" Image
 
       - name: Repack boot.img
         run: |

@@ -29,8 +29,24 @@
 | 关闭 `CONFIG_UBSAN` | 未定义行为检测, 运行时开销 |
 | 关闭 `CONFIG_SLUB_DEBUG` | slub 调试, 内存/性能开销 |
 | `HZ` 250 → 1000 | 调度 tick 更密, 交互/游戏更跟手 |
+| `NR_CPUS` 32 → 8 | bengal 仅 8 核, 减小 percpu 数组内存/cache 压力 |
+| `PREEMPT_DYNAMIC` | 运行时可在 full/voluntary 抢占间切换 |
 | Full LTO → thin LTO | 官方 GKI 同款, 避免 CI 内存不足 |
 | 清除 whitelist/trim-ksyms | 移除厂商构建机绝对路径依赖 |
+
+## 编译加速
+
+- **ccache** (6G) 缓存编译产物, 二次构建命中率高, 迭代调优省 50-70% 时间
+- thin LTO + 关闭 KASAN 本身也大幅缩短编译时间
+
+## 刷机后调优 (运行时, 重启失效)
+
+```bash
+adb push scripts/tune.sh /data/local/tmp/
+adb shell su -c "sh /data/local/tmp/tune.sh"
+```
+
+调度延迟收紧 (4ms/1ms/0.8ms) + swappiness=100 (配合 zram) + page-cluster=8。持久化可做成 KernelSU 模块。
 
 ## 说明
 
