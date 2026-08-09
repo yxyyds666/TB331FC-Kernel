@@ -1,140 +1,130 @@
 ---
 name: tb331fc-kernel
-description: TB331FC (小新Pad 2024) 内核云编译全流程 — 构建、发布、刷机、版本管理。用于"编译内核/发新版/更新内核/刷机"等请求。
+description: TB331FC (小新Pad 2024) 内核云编译全流程 — 矩阵构建、单 Release 三产物、刷机、版本管理。用于"编译内核/发新版/更新内核/刷机/发布"等请求。
 ---
 
 # TB331FC Kernel 工作流
 
-小新Pad 2024 (TB331FC) 定制内核:谷歌原版 GKI 5.15.167 + 原版 KernelSU + SusFS,GitHub Actions 云编译 + 自动 Release。
+小新Pad 2024 (TB331FC) 定制内核:谷歌原版 GKI 5.15.167 + **原版 KernelSU** + SusFS 2.2.0,GitHub Actions 矩阵云编译,**每次 Release 打包 3 个变体**。
 
 ## 仓库结构
 
-- `config.gz` — 设备原版内核配置 (5.15.167)
+- `config.gz` — 设备原版内核配置 (5.15.167, 来自 /proc/config.gz)
 - `boot_a.img` — 原版 boot 分区 (header v4, 无 ramdisk, 回滚用)
-- `.github/workflows/build.yml` — 云编译 + 自动发布管线
-- `scripts/repack.py` — boot.img 重打包 (替换内核段, 可选融合 vendor ramdisk)
+- `.github/workflows/build.yml` — 矩阵构建 + 汇总发布管线
+- `scripts/repack.py` — boot.img 重打包 (替换内核段, 支持 --cmdline 注入 / --vendor-ramdisk)
 - `scripts/bump_version.sh` — 版本递增 (patch/minor/major)
 - `scripts/tune.sh` — 刷机后运行时调优
+- `scripts/patch/pelt-half-life-16ms.patch` — PELT 16ms 补丁 (feature 变体用)
 
-## 编译管线 (build.yml)
+## 三变体架构 (矩阵构建)
+
+workflow 用 `strategy.matrix.variant: [main, debug, feature]` 并行构建,三个 job 独立产出,`publish` job 汇总为**单个 Release**:
+
+| 变体 | 定位 | 差异 | 产物 |
+|---|---|---|---|
+| **main** | 正式 | 原汁原味 KSU + SusFS, 无性能优化 | `boot-main.img` + `TB331FC-main-AnyKernel3.zip` |
+| **debug** | 调试 | main + pstore/512KB 日志/动态调试/oops 不重启 + **cmdline 写死宽容** | `boot-debug.img` + `TB331FC-debug-AnyKernel3.zip` |
+| **feature** | 实验 | main + O3/PELT 16ms/zstd/HZ=1000/NR_CPUS=8/关 KASAN (不稳定) | `boot-feature.img` + `TB331FC-feature-AnyKernel3.zip` |
+
+分支仅作源码管理(debug/feature 分支存在),**构建内容由矩阵 variant 决定**,与分支无关。
+
+## 编译管线 (每个变体)
 
 ```
 GKI android13-5.15.167_r00 (google common 仓库)
-→ 原版 KernelSU (main) + SusFS 10_enable/50_add 补丁
-→ SusFS 2.2.0 内核补丁 (50_add_susfs_in_gki-android13-5.15.patch + fs/susfs.c + include/linux/*)
-→ config.gz + 性能优化 (关 KASAN/UBSAN/SLUB_DEBUG, HZ=1000, NR_CPUS=8)
-→ clang 17 + ccache 编译 → repack boot.img + AK3 zip
-→ 自动创建 GitHub Release
+→ 原版 KernelSU main (tiann/KernelSU, setup.sh 集成)
+→ SusFS: 10_enable (KSU 驱动侧) + 50_add (内核侧) + fs/susfs.c + include/linux/*
+→ [feature only] PELT 16ms 补丁
+→ config.gz + 构建修复 (whitelist/trim/LTO thin) + [feature] 性能项 + [debug] 调试项
+→ clang 17 + ccache → Image → repack boot-<variant>.img + AK3 zip
+→ publish: 六文件合并发布一个 Release
 ```
 
 ## 标准操作流程
 
-### 1. 发布新版本 (push 即触发)
+### 1. 发布新版本
 
 ```bash
-git add . && git commit -m "<改动说明>" && git push origin main
+git add . && git commit -m "<说明>" && git push origin main   # 自动构建, 版本 patch+1
 ```
 
-- push 后自动构建,成功后自动 Release,**版本号自动 patch+1**(第三位)
-- 升第二位(补丁/新功能)或第一位(重大更新)时:
-
-```bash
-gh workflow run build.yml -f bump=minor   # 第二位 +1
-gh workflow run build.yml -f bump=major   # 第一位 +1
-```
+- push 到 main 触发全矩阵构建(3 变体并行, 约 30-50 分钟),成功后自动发布
+- 升第二位(新功能)或第一位(重大更新):
+  ```bash
+  gh workflow run build.yml -f bump=minor   # 第二位 +1
+  gh workflow run build.yml -f bump=major   # 第一位 +1
+  ```
+- **不想 push 触发构建**时:commit 消息加 `[skip ci]`,然后手动 dispatch
 
 ### 2. 查看状态
 
 ```bash
 gh run list --repo yxyyds666/TB331FC-Kernel --limit 3
-gh release list --repo yxyyds666/TB331FC-Kernel --limit 3
 gh run view <run_id> --repo yxyyds666/TB331FC-Kernel --log-failed   # 失败日志
+gh run view <run_id> --repo yxyyds666/TB331FC-Kernel --json jobs -q '.jobs[] | .name + " " + .status'  # 矩阵各 job
 ```
 
 ### 3. 下载产物
 
 ```bash
-gh release download --repo yxyyds666/TB331FC-Kernel --pattern "TB331FC-AnyKernel3.zip"   # 或 boot.img
+gh release download <tag> --repo yxyyds666/TB331FC-Kernel   # 一次拿全 6 文件
+# 或浏览器 https://github.com/yxyyds666/TB331FC-Kernel/releases
 ```
 
 ### 4. 刷机
 
 ```bash
 adb reboot bootloader
-fastboot boot boot.img        # 先临时引导测试 (不写入, 重启还原)
+fastboot boot boot-main.img        # 先临时引导测试 (不写入, 重启还原)
 # 正常后:
-fastboot flash boot boot.img  # 持久化
+fastboot flash boot boot-main.img  # 持久化
+# 或 AK3 zip 设备端刷入 (TWRP/KernelSU Manager)
 ```
-
-或设备端直接刷 `TB331FC-AnyKernel3.zip` (TWRP/KernelSU Manager)。
 
 ### 5. 回滚
 
 ```bash
-fastboot flash boot boot_a.img   # 仓库内原版镜像
+fastboot flash boot boot_a.img     # 仓库内原版镜像
 ```
+
+### 6. 拉取启动日志 (debug 变体)
+
+```bash
+adb shell cat /sys/fs/pstore/console-ramoops-0   # 崩溃/启动日志
+adb shell dmesg | grep -iE "error|fail|panic"    # debug 变体免 root
+adb logcat -b crash -d                            # 应用崩溃
+```
+
+## 版本号规则
+
+`x.x.x` = 重大更新.补丁.修补;首次发布固定 v1.0.0;push 自动 patch+1;dispatch 可选 minor/major。
 
 ## 修改内核配置时注意
 
 1. **config 变更会让 ccache 几乎全失效**(autoconf.h 依赖),构建时间回到全量
 2. KMI 约束:保持 `android13-5.15.167` 版本与 stock 一致,否则 vendor 模块可能不加载
-3. `CONFIG_KSU_SUSFS` 同时控制内核侧 `fs/susfs.o` 编译,无独立 CONFIG_SUSFS
-4. **KPM 不在本内核**:原版 KernelSU v3 已移除 KernelPatch;需要 KPM 换 SukiSU-Ultra
-5. `PREEMPT_DYNAMIC` 是 6.x 特性,5.15 无此符号
-6. vendor config 含构建机绝对路径依赖 (`abi_symbollist.raw`),必须 `--undefine UNUSED_KSYMS_WHITELIST` + `--undefine TRIM_UNUSED_KSYMS`
-
-## 三分支架构
-
-| 分支 | 定位 | 内容 | 版本序列 |
-|---|---|---|---|
-| main | 正式 | 原汁原味 KernelSU + SusFS (无优化) | `vX.Y.Z` |
-| debug | 调试 | main + 日志 (IS_DEBUG 控制) | `debug-vX.Y.Z` |
-| feature | 实验 | main + 优化补丁 (IS_FEATURE 控制: O3/PELT/zstd/HZ/NR_CPUS/关KASAN) | `feature-vX.Y.Z` |
-
-workflow 控制变量:`IS_DEBUG` / `IS_FEATURE` / `BRANCH_PREFIX`(env,按 ref_name 求值)。
-
-### debug 与 main 的差异 (IS_DEBUG)
-
-| 项 | main | debug |
-|---|---|---|
-| 产物 | boot.img + AK3 zip | boot-debug.img + TB331FC-debug-AnyKernel3.zip |
-| config 附加 | — | 关 PANIC_ON_OOPS, LOG_BUF_SHIFT=19, DYNAMIC_DEBUG, DEBUG_ATOMIC_SLEEP |
-| cmdline | 空 | `androidboot.selinux=permissive enforcing=0` (repack.py --cmdline) |
-| Release | 正式 notes | 调试 notes + pstore 拉日志说明 |
-
-### feature 与 main 的差异 (IS_FEATURE)
-
-- config: 关 KASAN/UBSAN/SLUB_DEBUG, HZ=1000, NR_CPUS=8, zram zstd
-- PELT 16ms 补丁 (scripts/patch/pelt-half-life-16ms.patch)
-- Build: `KBUILD_CFLAGS += -O3` (Makefile 追加)
-- Release notes 标注 EXPERIMENTAL, 建议 fastboot boot 临时引导测试
-
-### Debug 构建操作
-
-```bash
-# 在 debug 分支上开发
-git checkout debug && git merge main   # 定期同步正式分支改动
-git push origin debug                  # 自动构建 + debug-vX.Y.Z Release
-```
-
-### 拉取启动日志 (刷入 debug 内核后)
-
-```bash
-adb shell cat /sys/fs/pstore/console-ramoops-0    # 崩溃/启动日志
-adb shell dmesg | grep -iE "error|fail|panic"
-adb shell cat /sys/kernel/debug/dynamic_debug/control
-```
-
-### repack.py 注意
-
-- `--cmdline "androidboot.selinux=permissive enforcing=0"` 写入 header cmdline 字段 (offset 44, 1536B)
-- 原版 cmdline 为空, 直接写入; 如需追加需手动拼接
+3. `CONFIG_KSU_SUSFS` 由 SusFS 10_enable 补丁添加,同时控制内核侧 `fs/susfs.o` 编译,无独立 CONFIG_SUSFS
+4. `PREEMPT_DYNAMIC` 是 6.x 特性,5.15 无此符号
+5. vendor config 含构建机绝对路径依赖 (`abi_symbollist.raw`),必须 `--undefine UNUSED_KSYMS_WHITELIST` + `--undefine TRIM_UNUSED_KSYMS`
+6. **KPM 不在本内核**:原版 KernelSU v3 已移除 KernelPatch;需要 KPM 换 SukiSU-Ultra
+7. 所有变量修改走矩阵 variant 判断 (`$VARIANT`),不要按分支名判断
 
 ## 常见故障排查
 
 | 症状 | 处理 |
 |---|---|
-| SusFS 补丁 hunk 失败 | SusFS 分支与 KernelSU 版本漂移;换分支或固定 commit |
-| `susfs_def.h not found` | include 目录必须整目录复制 (`cp -r .../include/linux/.`) |
+| SusFS 补丁 hunk 失败 | SusFS 分支与 KernelSU 版本漂移;KernelSU 用 main (补丁同步), 或固定 SusFS commit |
+| `susfs_def.h not found` | include 目录必须整目录复制 (`cp -r .../include/linux/. include/linux/`) |
 | 编译 OOM | Full LTO 改 thin LTO (workflow 已内置) |
 | Manager 版本不匹配 | 内核 KSU_VERSION ≥ Manager 要求;原版 main 325xx+ 兼容官方 Manager 32525 |
+| 版本号前缀重复 (debug-debug-x) | bump_version.sh 剥离逻辑须兼容无 v 的 tag (已修复: `${LATEST#${PREFIX}}` + `${VER#v}`) |
+| PELT 步骤 grep 失败 | 步骤 cwd 是 workspace 根, 路径写 `kernel/sched/sched-pelt.h` |
+| bootloop 排查 | 先刷 boot-main.img (最干净);仍 bootloop 则二分: 无 SusFS 仅 KSU 隔离版 |
+| Release 缺某变体 | publish job 检测三个 boot 文件齐全才发布, 缺失时查对应 build job 日志 |
+
+## 调试内核要点
+
+- debug 变体: `oops 不重启` (PANIC_ON_OOPS 关) + 512KB 日志缓冲 + 全量动态调试 + SELinux 写死宽容
+- pstore 文件拉完即删 (`rm /sys/fs/pstore/*`), 否则下次崩溃日志混叠
+- 崩溃现场: `su -c cat /sys/fs/pstore/console-ramoops-0` (需要 root, KSU 授权后可用)
