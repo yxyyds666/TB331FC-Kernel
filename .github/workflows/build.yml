@@ -200,6 +200,8 @@ jobs:
 
       # 自动发布 Release: 版本号 x.x.x (重大更新.补丁.修补); debug 分支独立序列 debug-vX.Y.Z
       - name: Publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           BUMP="${{ inputs.bump || 'patch' }}"
           VERSION=$(bash scripts/bump_version.sh "$BUMP" "${DEBUG_PREFIX}")
