@@ -20,6 +20,11 @@ on:
 permissions:
   contents: write
 
+# 同一分支只保留最新构建, 防止并发 Release 版本竞争
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   BRANCH: ${{ github.ref_name }}
   IS_DEBUG: ${{ github.ref_name == 'debug' }}
