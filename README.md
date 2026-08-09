@@ -2,12 +2,12 @@
 
 小新Pad 2024 (TB331FC) 定制内核 —— **ReKernel** 系列
 
-基于谷歌原版 **GKI 5.15.167** 编译,集成 **KernelSU (ReSukiSU)** + **SusFS 2.2.0**,带针对性性能优化。GitHub Actions 全自动云编译,构建完成后自动发布 Release。
+基于谷歌原版 **GKI 5.15.167** 编译,集成 **原版 KernelSU** + **SusFS 2.2.0**,带针对性性能优化。GitHub Actions 全自动云编译,构建完成后自动发布 Release。
 
 ## ✨ 特性
 
 - **内核**:谷歌官方 GKI `android13-5.15.167_r00`(与设备 stock KMI 完全一致,vendor 模块兼容)
-- **KernelSU (ReSukiSU 349xx)**:内核级 root,多管理器支持(官方 KernelSU / RKSU / MKSU / SukiSU 管理器均可),兼容最新官方 Manager
+- **KernelSU (原版, 325xx+)**:内核级 root,兼容官方 Manager 32525
 - **SusFS 2.2.0**:root 隐藏内核补丁(挂载伪装、路径隐藏、uname 伪装、打开重定向等)
 - **性能优化**:关闭 KASAN(20-50% 性能损失)/ UBSAN / SLUB_DEBUG,`HZ=1000` 调度更跟手,`NR_CPUS=8` 精简 percpu,**-O3 全局编译**,**PELT half-life 16ms**(省电 ~5%),zram 换 **zstd** 压缩
 - **全自动发布**:push 即构建,成功即生成 Release(v1.0.0 起,语义化版本号)
@@ -80,7 +80,7 @@ gh release list --repo yxyyds666/TB331FC-Kernel
 
 ```
 GKI android13-5.15.167_r00
-→ ReSukiSU (内置 SusFS 适配, 多管理器)
+→ 原版 KernelSU (main) + SusFS 10_enable 补丁
 → SusFS 2.2.0 内核补丁 (50_add)
 → config.gz + 性能优化 (关 KASAN/UBSAN/SLUB_DEBUG, HZ=1000, NR_CPUS=8)
 → clang 17 编译 (ccache 加速)
@@ -124,12 +124,12 @@ adb shell cat /sys/kernel/debug/dynamic_debug/control  # 动态调试开关
 
 ## ⚠️ 说明
 
-- **KPM 不含**:ReSukiSU 已移除 KernelPatch/KPM 机制;如需 KPM 请改用 SukiSU-Ultra 构建
+- **KPM 不含**:原版 KernelSU v3 已移除 KernelPatch/KPM 机制;如需 KPM 请改用 SukiSU-Ultra 构建
 - SusFS 为实验性代码,可能存在性能损耗或稳定性问题
 - 内核仅供学习研究使用,刷机风险自负
 
 ## 🔗 相关项目
 
-- [KernelSU](https://github.com/tiann/KernelSU) / [ReSukiSU](https://github.com/ReSukiSU/ReSukiSU) / [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)
+- [KernelSU](https://github.com/tiann/KernelSU) / [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)
 - [SusFS (simonpunk)](https://gitlab.com/simonpunk/susfs4ksu)
 - [AnyKernel3 (WildKernels)](https://github.com/WildKernels/AnyKernel3)

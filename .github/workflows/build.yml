@@ -31,10 +31,10 @@ env:
   DEBUG_PREFIX: ${{ github.ref_name == 'debug' && 'debug-' || '' }}
   # 谷歌官方 GKI 5.15 tag — 与设备原版内核 config.gz 的 5.15.167 对应
   GKI_TAG: android13-5.15.167_r00
-  # ReSukiSU: 最新版 KSU (v34993+, 兼容官方 Manager 32525) + 内置 SusFS 适配
-  # 注意: ReSukiSU 已移除 KPM (KernelPatch), 如需 KPM 请改用 SukiSU-Ultra
+  # 原版 KernelSU main 分支: SusFS gki-android13-5.15 分支与之持续同步, 补丁完全匹配;
+  # KSU_VERSION=30000+git计数 (>32513), 兼容官方 Manager 32525
   KSU_TAG: main
-  KSU_REPO: ReSukiSU/ReSukiSU
+  KSU_REPO: tiann/KernelSU
   # SusFS 对应 GKI 5.15 的分支 (内核侧补丁与 KSU 变体无关)
   SUSFS_BRANCH: gki-android13-5.15
   # clang 17.0.4 (LLVM 官方 release, 与 GKI 5.15 官方构建的 clang 17 同代)
@@ -74,28 +74,29 @@ jobs:
             https://android.googlesource.com/kernel/common kernel
 
       # 必须先集成 KernelSU 再 olddefconfig, 否则 CONFIG_KSU 符号不会进入 .config
-      # ReSukiSU setup.sh 已内置其仓库 clone URL
-      - name: Integrate KernelSU (ReSukiSU)
+      - name: Integrate KernelSU (原版)
         run: |
           cd kernel
           curl -LSs -o setup.sh \
             "https://raw.githubusercontent.com/${KSU_REPO}/${KSU_TAG}/kernel/setup.sh"
           bash setup.sh "${KSU_TAG}"
           grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig
-          echo "[+] ReSukiSU 集成完成"
+          echo "[+] KernelSU 集成完成"
 
-      # SusFS: 仅需内核侧补丁 (ReSukiSU 自带 KSU_SUSFS 驱动侧支持, 不打 10_enable)
-      - name: Integrate SusFS kernel patches
+      # SusFS: 10_enable 补丁 (给 KernelSU 驱动侧) + 50_add 补丁 (给内核侧)
+      - name: Integrate SusFS patches
         run: |
           cd kernel
           git clone --depth 1 -b "${SUSFS_BRANCH}" \
             https://gitlab.com/simonpunk/susfs4ksu susfs4ksu
+          cp susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch KernelSU/
           cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch .
           # 整目录复制 (fs/ 含 susfs.c; include/linux/ 含 susfs.h + susfs_def.h)
           cp -r susfs4ksu/kernel_patches/fs/. fs/
           cp -r susfs4ksu/kernel_patches/include/linux/. include/linux/
+          cd KernelSU && patch -p1 < 10_enable_susfs_for_ksu.patch && cd ..
           patch -p1 < 50_add_susfs_in_gki-android13-5.15.patch
-          echo "[+] SusFS 内核补丁完成"
+          echo "[+] SusFS 补丁完成"
 
       # 性能补丁: PELT half-life 32ms -> 16ms (社区实测省电 ~5%)
       # 补丁由内核自带生成器 (Documentation/scheduler/sched-pelt) 生成, 系数表与周期严格匹配
@@ -121,7 +122,7 @@ jobs:
           ./scripts/config --undefine LTO_CLANG_FULL
           ./scripts/config --enable LTO_CLANG_THIN
           make ARCH=arm64 LLVM=1 olddefconfig
-          # 保险: CONFIG_KSU / KSU_SUSFS (ReSukiSU default n, 必须显式开启;
+          # 保险: CONFIG_KSU / KSU_SUSFS (由 10_enable 补丁添加, default y 兜底;
           # 该符号同时控制内核侧 fs/susfs.o 编译, 无独立 CONFIG_SUSFS)
           grep -q "^CONFIG_KSU=y" .config || {
             ./scripts/config --enable KSU
@@ -193,11 +194,11 @@ jobs:
           rm -rf AK3/.git
           cp kernel/arch/arm64/boot/Image AK3/Image
           if [ "$IS_DEBUG" = "true" ]; then
-            sed -i 's|kernel.string=.*|kernel.string=TB331FC DEBUG Kernel (ReSukiSU + SusFS + Selinux permissive)|' AK3/anykernel.sh
+            sed -i 's|kernel.string=.*|kernel.string=TB331FC DEBUG Kernel (KSU + SusFS + Selinux permissive)|' AK3/anykernel.sh
             cd AK3 && zip -r ../TB331FC-debug-AnyKernel3.zip ./* > /dev/null && cd ..
             ls -la TB331FC-debug-AnyKernel3.zip
           else
-            sed -i 's|kernel.string=.*|kernel.string=TB331FC KernelSU (ReSukiSU + SusFS)|' AK3/anykernel.sh
+            sed -i 's|kernel.string=.*|kernel.string=TB331FC KernelSU (KSU + SusFS)|' AK3/anykernel.sh
             cd AK3 && zip -r ../TB331FC-AnyKernel3.zip ./* > /dev/null && cd ..
             ls -la TB331FC-AnyKernel3.zip
           fi
@@ -227,7 +228,7 @@ jobs:
               TB331FC-debug-AnyKernel3.zip \
               kernel/arch/arm64/boot/Image \
               --title "TB331FC DEBUG Kernel ${VERSION}" \
-              --notes "调试内核: ReSukiSU + SusFS v2.2.0 + SELinux 写死宽容
+              --notes "调试内核: KernelSU + SusFS v2.2.0 + SELinux 写死宽容
 
           - 日志: pstore/ramoops + 512KB 缓冲 + 全量动态调试 + oops 不重启
           - 宽容: androidboot.selinux=permissive enforcing=0 (开机即 permissive)
@@ -239,7 +240,7 @@ jobs:
               TB331FC-AnyKernel3.zip \
               kernel/arch/arm64/boot/Image \
               --title "TB331FC Kernel ${VERSION}" \
-              --notes "KernelSU (ReSukiSU) + SusFS v2.2.0 内核
+              --notes "KernelSU + SusFS v2.2.0 内核
 
           - 内核: GKI android13-5.15.167 (与设备 stock KMI 一致)
           - 特性: KernelSU 349xx (多管理器, 兼容官方 Manager) + SusFS + 性能优化 (关 KASAN/UBSAN, HZ=1000, NR_CPUS=8)
