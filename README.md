@@ -9,7 +9,7 @@
 - **内核**:谷歌官方 GKI `android13-5.15.167_r00`(与设备 stock KMI 完全一致,vendor 模块兼容)
 - **KernelSU (ReSukiSU 349xx)**:内核级 root,多管理器支持(官方 KernelSU / RKSU / MKSU / SukiSU 管理器均可),兼容最新官方 Manager
 - **SusFS 2.2.0**:root 隐藏内核补丁(挂载伪装、路径隐藏、uname 伪装、打开重定向等)
-- **性能优化**:关闭 KASAN(20-50% 性能损失)/ UBSAN / SLUB_DEBUG,`HZ=1000` 调度更跟手,`NR_CPUS=8` 精简 percpu
+- **性能优化**:关闭 KASAN(20-50% 性能损失)/ UBSAN / SLUB_DEBUG,`HZ=1000` 调度更跟手,`NR_CPUS=8` 精简 percpu,**-O3 全局编译**,**PELT half-life 16ms**(省电 ~5%),zram 换 **zstd** 压缩
 - **全自动发布**:push 即构建,成功即生成 Release(v1.0.0 起,语义化版本号)
 
 ## 📦 产物
