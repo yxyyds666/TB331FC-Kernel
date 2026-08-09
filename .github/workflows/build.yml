@@ -108,7 +108,7 @@ jobs:
         run: |
           cd kernel
           patch -p1 < "${{ github.workspace }}/scripts/patch/pelt-half-life-16ms.patch"
-          grep -E "^#define LOAD_AVG_PERIOD" sched/sched-pelt.h
+          grep -E "^#define LOAD_AVG_PERIOD" kernel/sched/sched-pelt.h
           echo "[+] PELT 16ms 补丁完成"
 
       - name: Apply device config (config.gz -> .config)
