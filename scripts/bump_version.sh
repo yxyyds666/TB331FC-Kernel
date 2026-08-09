@@ -19,7 +19,9 @@ if [ -z "$LATEST" ]; then
   exit 0
 fi
 
-VER="${LATEST#${PREFIX}v}"
+# 剥离前缀与可选的 v (tag 可能为 1.0.0 / v1.0.0 / debug-1.0.0 / debug-v1.0.0)
+VER="${LATEST#${PREFIX}}"
+VER="${VER#v}"
 
 IFS='.' read -r MAJOR MINOR PATCH <<< "$VER"
 MAJOR=${MAJOR:-0}; MINOR=${MINOR:-0}; PATCH=${PATCH:-0}

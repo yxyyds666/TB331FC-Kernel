@@ -107,6 +107,7 @@ adb shell su -c "sh /data/local/tmp/tune.sh"
 |---|---|---|
 | Release | `vX.Y.Z` | `debug-vX.Y.Z`(独立版本序列) |
 | 产物 | `boot.img` + AK3 zip | `boot-debug.img` + `TB331FC-debug-AnyKernel3.zip` |
+| 性能优化 (-O3/PELT/zstd/HZ/NR_CPUS) | ✅ 全开 | ❌ **全部去掉**(保持原版行为, 便于问题定位) |
 | 内核日志 | 默认 | pstore/ramoops + 512KB 缓冲 + 全量动态调试 |
 | 崩溃行为 | oops 即重启 | **oops 不重启**(保留现场抓日志) |
 | SELinux | enforcing | **写死 permissive**(`androidboot.selinux=permissive enforcing=0`) |
