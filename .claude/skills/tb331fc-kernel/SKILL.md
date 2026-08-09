@@ -24,7 +24,7 @@ workflow 用 `strategy.matrix.variant: [main, debug, feature]` 并行构建,三�
 | 变体 | 定位 | 差异 | 产物 |
 |---|---|---|---|
 | **main** | 正式 | 原汁原味 KSU + SusFS, 无性能优化 | `boot-main.img` + `TB331FC-main-AnyKernel3.zip` |
-| **debug** | 调试 | main + pstore/512KB 日志/动态调试/oops 不重启 + **cmdline 写死宽容** | `boot-debug.img` + `TB331FC-debug-AnyKernel3.zip` |
+| **debug** | 调试 | main + pstore/512KB 日志/动态调试/oops 不重启 | `boot-debug.img` + `TB331FC-debug-AnyKernel3.zip` |
 | **feature** | 实验 | main + O3/PELT 16ms/zstd/HZ=1000/NR_CPUS=8/关 KASAN (不稳定) | `boot-feature.img` + `TB331FC-feature-AnyKernel3.zip` |
 
 分支仅作源码管理(debug/feature 分支存在),**构建内容由矩阵 variant 决定**,与分支无关。
@@ -129,6 +129,7 @@ adb logcat -b crash -d                            # 应用崩溃
 
 ## 调试内核要点
 
-- debug 变体: `oops 不重启` (PANIC_ON_OOPS 关) + 512KB 日志缓冲 + 全量动态调试 + SELinux 写死宽容
+- debug 变体: `oops 不重启` (PANIC_ON_OOPS 关) + 512KB 日志缓冲 + 全量动态调试
+- **严禁注入 boot cmdline**: 原版 cmdline 为空, 高通 ABL 对非空 cmdline 处理缺陷导致无法开机 (实机验证); 宽容用运行时 `su -c setenforce 0`
 - pstore 文件拉完即删 (`rm /sys/fs/pstore/*`), 否则下次崩溃日志混叠
 - 崩溃现场: `su -c cat /sys/fs/pstore/console-ramoops-0` (需要 root, KSU 授权后可用)

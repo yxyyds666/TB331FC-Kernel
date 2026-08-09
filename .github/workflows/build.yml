@@ -171,18 +171,12 @@ jobs:
 
       - name: Repack boot.img
         run: |
-          if [ "$VARIANT" = "debug" ]; then
-            python3 scripts/repack.py \
-              --input boot_a.img \
-              --kernel kernel/arch/arm64/boot/Image \
-              --cmdline "androidboot.selinux=permissive enforcing=0" \
-              --output "boot-${VARIANT}.img"
-          else
-            python3 scripts/repack.py \
-              --input boot_a.img \
-              --kernel kernel/arch/arm64/boot/Image \
-              --output "boot-${VARIANT}.img"
-          fi
+          # 注意: 严禁注入 cmdline! 原版 boot cmdline 全空, 高通 ABL 对非空
+          # cmdline 处理有缺陷, 会导致无法开机 (已实机验证, 两次不同内核均失败)
+          python3 scripts/repack.py \
+            --input boot_a.img \
+            --kernel kernel/arch/arm64/boot/Image \
+            --output "boot-${VARIANT}.img"
 
       # AnyKernel3 刷机包: 设备端 (TWRP/Manager) 直接刷入, 无需电脑 fastboot
       - name: Package AnyKernel3 zip

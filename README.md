@@ -16,7 +16,7 @@
 | 文件 | 变体 | 说明 |
 |---|---|---|
 | `boot-main.img` / `TB331FC-main-AnyKernel3.zip` | main | **原汁原味**:KernelSU + SusFS,无性能优化,日常使用 |
-| `boot-debug.img` / `TB331FC-debug-AnyKernel3.zip` | debug | main + 调试日志(pstore 保留、512KB 缓冲、动态调试、oops 不重启、SELinux 写死宽容),问题定位用 |
+| `boot-debug.img` / `TB331FC-debug-AnyKernel3.zip` | debug | main + 调试日志(pstore 保留、512KB 缓冲、动态调试、oops 不重启),问题定位用 |
 | `boot-feature.img` / `TB331FC-feature-AnyKernel3.zip` | feature | main + **实验性优化**(-O3 编译、PELT 16ms、zram zstd、HZ=1000、关 KASAN),不稳定,仅供测试 |
 
 > 三个变体共用同一 GKI 5.15.167 内核与 KMI,可互相替换刷入。
@@ -54,8 +54,10 @@ fastboot boot boot-main.img
 | 变体 | 定位 | 与 main 的差异 |
 |---|---|---|
 | **main** | 正式 | —(原汁原味, 无性能优化) |
-| **debug** | 调试 | `PANIC_ON_OOPS` 关闭(oops 不重启保留现场)、`LOG_BUF_SHIFT` 17→19(512KB 日志)、`DYNAMIC_DEBUG` 全量、cmdline 写死宽容 `androidboot.selinux=permissive enforcing=0` |
+| **debug** | 调试 | `PANIC_ON_OOPS` 关闭(oops 不重启保留现场)、`LOG_BUF_SHIFT` 17→19(512KB 日志)、`DYNAMIC_DEBUG` 全量 |
 | **feature** | 实验 | 关 `KASAN`/`UBSAN`/`SLUB_DEBUG`、`HZ=1000`、`NR_CPUS=8`、zram zstd、PELT half-life 16ms、`-O3` 全局编译 |
+
+> **不注入 boot cmdline**(原版 cmdline 为空,高通 ABL 对非空 cmdline 处理有缺陷会导致无法开机,已实机验证)。SELinux 宽容请用运行时方式:`adb shell su -c setenforce 0`。
 
 > 注:参数调整属于 feature 变体的实验内容,main 不包含。
 
