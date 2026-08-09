@@ -83,19 +83,31 @@ fastboot flash boot boot_a.img   # 仓库内原版镜像
 5. `PREEMPT_DYNAMIC` 是 6.x 特性,5.15 无此符号
 6. vendor config 含构建机绝对路径依赖 (`abi_symbollist.raw`),必须 `--undefine UNUSED_KSYMS_WHITELIST` + `--undefine TRIM_UNUSED_KSYMS`
 
-## Debug 分支 (调试内核)
+## 三分支架构
 
-`debug` 分支与 main 共用同一管线,产出调试内核:完整日志 + SELinux 写死宽容。
+| 分支 | 定位 | 内容 | 版本序列 |
+|---|---|---|---|
+| main | 正式 | 原汁原味 KernelSU + SusFS (无优化) | `vX.Y.Z` |
+| debug | 调试 | main + 日志 (IS_DEBUG 控制) | `debug-vX.Y.Z` |
+| feature | 实验 | main + 优化补丁 (IS_FEATURE 控制: O3/PELT/zstd/HZ/NR_CPUS/关KASAN) | `feature-vX.Y.Z` |
 
-### 与 main 的差异 (workflow 中 IS_DEBUG 条件控制)
+workflow 控制变量:`IS_DEBUG` / `IS_FEATURE` / `BRANCH_PREFIX`(env,按 ref_name 求值)。
+
+### debug 与 main 的差异 (IS_DEBUG)
 
 | 项 | main | debug |
 |---|---|---|
-| 版本序列 | `vX.Y.Z` | `debug-vX.Y.Z` (bump 脚本前缀参数) |
 | 产物 | boot.img + AK3 zip | boot-debug.img + TB331FC-debug-AnyKernel3.zip |
 | config 附加 | — | 关 PANIC_ON_OOPS, LOG_BUF_SHIFT=19, DYNAMIC_DEBUG, DEBUG_ATOMIC_SLEEP |
 | cmdline | 空 | `androidboot.selinux=permissive enforcing=0` (repack.py --cmdline) |
 | Release | 正式 notes | 调试 notes + pstore 拉日志说明 |
+
+### feature 与 main 的差异 (IS_FEATURE)
+
+- config: 关 KASAN/UBSAN/SLUB_DEBUG, HZ=1000, NR_CPUS=8, zram zstd
+- PELT 16ms 补丁 (scripts/patch/pelt-half-life-16ms.patch)
+- Build: `KBUILD_CFLAGS += -O3` (Makefile 追加)
+- Release notes 标注 EXPERIMENTAL, 建议 fastboot boot 临时引导测试
 
 ### Debug 构建操作
 

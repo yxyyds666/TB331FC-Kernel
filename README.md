@@ -97,21 +97,33 @@ adb shell su -c "sh /data/local/tmp/tune.sh"
 
 调度延迟收紧 + swappiness=100(配合 zram)+ page-cluster=8,重启失效,可做成 KernelSU 模块持久化。
 
-## 🐛 Debug 分支(调试内核)
+## 🌿 分支架构 (三分支)
 
-`debug` 分支产出**调试专用内核**:完整日志保留 + SELinux 写死宽容,用于启动失败定位、驱动调试。
+| 分支 | 定位 | 内容 | Release |
+|---|---|---|---|
+| **main** | 正式内核 | **原汁原味** KernelSU + SusFS(无性能优化) | `vX.Y.Z` |
+| **debug** | 调试内核 | main + 内核日志(pstore/宽容/动态调试) | `debug-vX.Y.Z` |
+| **feature** | 实验内核 | main + 实验性优化补丁(O3/PELT/zstd, 不稳定) | `feature-vX.Y.Z` |
 
-**与正式内核的差异**:
+**main(正式)** — 原汁原味:KernelSU + SusFS 2.2.0,仅构建必需修复(thin LTO、whitelist 清理),**无任何性能优化**。
 
-| 项 | 正式 (main) | 调试 (debug) |
+**debug(调试)** — main + 调试日志:
+
+| 项 | main | debug |
 |---|---|---|
-| Release | `vX.Y.Z` | `debug-vX.Y.Z`(独立版本序列) |
-| 产物 | `boot.img` + AK3 zip | `boot-debug.img` + `TB331FC-debug-AnyKernel3.zip` |
-| 性能优化 (-O3/PELT/zstd/HZ/NR_CPUS) | ✅ 全开 | ❌ **全部去掉**(保持原版行为, 便于问题定位) |
 | 内核日志 | 默认 | pstore/ramoops + 512KB 缓冲 + 全量动态调试 |
 | 崩溃行为 | oops 即重启 | **oops 不重启**(保留现场抓日志) |
 | SELinux | enforcing | **写死 permissive**(`androidboot.selinux=permissive enforcing=0`) |
 | `dmesg` 权限 | root | 普通用户可读 |
+| 产物 | `boot.img` | `boot-debug.img` + `TB331FC-debug-AnyKernel3.zip` |
+
+**feature(实验)** — main + 实验优化,可能不稳定,仅建议 `fastboot boot` 临时引导测试:
+
+| 实验项 | 内容 |
+|---|---|
+| 编译 | `-O3` 全局 + thin LTO |
+| 调度 | PELT half-life 16ms、HZ=1000 |
+| 其他 | zram zstd、NR_CPUS=8、关 KASAN/UBSAN/SLUB_DEBUG |
 
 **拉取启动日志**(刷入 debug 内核、重启后):
 
