@@ -75,9 +75,9 @@ def main() -> None:
 
     # 可选: 融合 vendor ramdisk (v4: 位于 kernel 之后, 头部记录大小)
     if vram:
-        if len(out) + len(vram) > 100 * 1024 * 1024:
+        if len(out) + len(vram) > 96 * 1024 * 1024:  # boot 分区实际 96MiB (100663296B)
             raise SystemExit(f"[ERROR] 融合后镜像 ({len(out)+len(vram)}B) 超出 "
-                             "boot 分区大小 (96MB)")
+                             "boot 分区大小 (96MiB)")
         struct.pack_into("<I", header, V4_VENDOR_RAMDISK_OFFSET, len(vram))
         out[:header_size] = header
         out += vram

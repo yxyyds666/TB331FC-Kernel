@@ -119,7 +119,7 @@ adb logcat -b crash -d                            # 应用崩溃
 | 编译 OOM | Full LTO 改 thin LTO (workflow 已内置) |
 | Manager 版本不匹配 | 内核 KSU_VERSION ≥ Manager 要求;原版 main 325xx+ 兼容官方 Manager 32525 |
 | 版本号前缀重复 (debug-debug-x) | bump_version.sh 剥离逻辑须兼容无 v 的 tag (已修复: `${LATEST#${PREFIX}}` + `${VER#v}`) |
-| PELT 步骤 grep 失败 | 步骤 cwd 是 workspace 根, 路径写 `kernel/sched/sched-pelt.h` |
+| PELT 步骤 grep 失败 | `cd kernel` 后 cwd 是内核树根, 验证路径用树内相对路径 `kernel/sched/sched-pelt.h` (缺 `kernel/` 前缀会 No such file) |
 | bootloop 排查 | 先刷 boot-main.img (最干净);仍 bootloop 则二分: 无 SusFS 仅 KSU 隔离版 |
 | Release 缺某变体 | publish job 检测三个 boot 文件齐全才发布, 缺失时查对应 build job 日志 |
 | 矩阵产物同名覆盖 | 三变体上传同名文件 (Image/.config) 会互相覆盖; 必须改名 Image-<variant> 后再上传 |

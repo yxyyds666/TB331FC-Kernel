@@ -11,7 +11,8 @@ BUMP="${1:-patch}"
 PREFIX="${2:-}"
 
 # 读取最新 release tag (按前缀 + 严格 x.y.z 格式过滤, 使各分支版本序列独立)
-LATEST=$(gh release list --repo "$REPO" --limit 50 --json tagName -q '.[].tagName' 2>/dev/null \
+# limit 100: 新模型下所有 Release 均为同一前缀, 最新版本总在列表内
+LATEST=$(gh release list --repo "$REPO" --limit 100 --json tagName -q '.[].tagName' 2>/dev/null \
   | grep -E "^${PREFIX}v?[0-9]+\.[0-9]+\.[0-9]+$" | sort -V | tail -1 || echo "")
 # 首次发布固定 1.0.0, 之后按 bump 递增
 if [ -z "$LATEST" ]; then

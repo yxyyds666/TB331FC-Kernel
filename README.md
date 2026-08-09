@@ -16,10 +16,11 @@
 | 文件 | 变体 | 说明 |
 |---|---|---|
 | `boot-main.img` / `TB331FC-main-AnyKernel3.zip` | main | **原汁原味**:KernelSU + SusFS,无性能优化,日常使用 |
-| `boot-debug.img` / `TB331FC-debug-AnyKernel3.zip` | debug | main + 调试日志(pstore 保留、512KB 缓冲、动态调试、oops 不重启),问题定位用 |
+| `boot-debug.img` / `TB331FC-debug-AnyKernel3.zip` | debug | main + 调试日志(512KB 缓冲、全量动态调试、oops 不重启),问题定位用 |
 | `boot-feature.img` / `TB331FC-feature-AnyKernel3.zip` | feature | main + **实验性优化**(-O3 编译、PELT 16ms、zram zstd、HZ=1000、关 KASAN),不稳定,仅供测试 |
 
 > 三个变体共用同一 GKI 5.15.167 内核与 KMI,可互相替换刷入。
+> 仓库内 `boot_a.img`(96MiB,回滚用)是 CI repack 的输入,保留在 git 中(接近 GitHub 100MiB 限制,未启用 LFS)。
 
 ## 🔧 刷机
 

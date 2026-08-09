@@ -27,7 +27,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  BRANCH: ${{ github.ref_name }}
   # 谷歌官方 GKI 5.15 tag — 与设备原版内核 config.gz 的 5.15.167 对应
   GKI_TAG: android13-5.15.167_r00
   # 原版 KernelSU main 分支: SusFS gki-android13-5.15 分支与之持续同步, 补丁完全匹配
