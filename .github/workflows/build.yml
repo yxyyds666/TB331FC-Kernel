@@ -9,11 +9,11 @@ on:
 env:
   # 谷歌官方 GKI 5.15 tag — 与设备原版内核 config.gz 的 5.15.167 对应
   GKI_TAG: android13-5.15.167_r00
-  # KernelSU main 分支: SusFS gki-android13-5.15 分支与之持续同步, 补丁完全匹配;
-  # KSU_VERSION=30000+git计数 (>32513), 满足 Manager v32525 要求。
-  # (v3.2.5 tag 与 SusFS 补丁有 hunk 漂移, 已实测 main 全绿)
+  # ReSukiSU: 最新版 KSU (v34993+, 兼容官方 Manager 32525) + 内置 SusFS 适配
+  # 注意: ReSukiSU 已移除 KPM (KernelPatch), 如需 KPM 请改用 SukiSU-Ultra
   KSU_TAG: main
-  # SusFS 对应 GKI 5.15 的分支 (与 KernelSU 官方 main 持续同步)
+  KSU_REPO: ReSukiSU/ReSukiSU
+  # SusFS 对应 GKI 5.15 的分支 (内核侧补丁与 KSU 变体无关)
   SUSFS_BRANCH: gki-android13-5.15
   # clang 17.0.4 (LLVM 官方 release, 与 GKI 5.15 官方构建的 clang 17 同代)
   CLANG_URL: https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.4/clang+llvm-17.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz
@@ -52,30 +52,28 @@ jobs:
             https://android.googlesource.com/kernel/common kernel
 
       # 必须先集成 KernelSU 再 olddefconfig, 否则 CONFIG_KSU 符号不会进入 .config
-      - name: Integrate KernelSU
+      # ReSukiSU setup.sh 已内置其仓库 clone URL
+      - name: Integrate KernelSU (ReSukiSU)
         run: |
           cd kernel
           curl -LSs -o setup.sh \
-            "https://raw.githubusercontent.com/tiann/KernelSU/${KSU_TAG}/kernel/setup.sh"
+            "https://raw.githubusercontent.com/${KSU_REPO}/${KSU_TAG}/kernel/setup.sh"
           bash setup.sh "${KSU_TAG}"
           grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig
-          echo "[+] KernelSU 集成完成"
+          echo "[+] ReSukiSU 集成完成"
 
-      # SusFS: 复制补丁与源码, 依次应用到 KernelSU/ 与内核根
-      # (README: 与官方 KernelSU tag 搭配使用, 补丁路径已按 v3.2.5 验证)
-      - name: Integrate SusFS
+      # SusFS: 仅需内核侧补丁 (ReSukiSU 自带 KSU_SUSFS 驱动侧支持, 不打 10_enable)
+      - name: Integrate SusFS kernel patches
         run: |
           cd kernel
           git clone --depth 1 -b "${SUSFS_BRANCH}" \
             https://gitlab.com/simonpunk/susfs4ksu susfs4ksu
-          cp susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch KernelSU/
           cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch .
           # 整目录复制 (fs/ 含 susfs.c; include/linux/ 含 susfs.h + susfs_def.h)
           cp -r susfs4ksu/kernel_patches/fs/. fs/
           cp -r susfs4ksu/kernel_patches/include/linux/. include/linux/
-          cd KernelSU && patch -p1 < 10_enable_susfs_for_ksu.patch && cd ..
           patch -p1 < 50_add_susfs_in_gki-android13-5.15.patch
-          echo "[+] SusFS 集成完成"
+          echo "[+] SusFS 内核补丁完成"
 
       - name: Apply device config (config.gz -> .config)
         run: |
@@ -91,7 +89,8 @@ jobs:
           ./scripts/config --undefine LTO_CLANG_FULL
           ./scripts/config --enable LTO_CLANG_THIN
           make ARCH=arm64 LLVM=1 olddefconfig
-          # 保险: 若 CONFIG_KSU / CONFIG_KSU_SUSFS 未开启则强制开启
+          # 保险: CONFIG_KSU / KSU_SUSFS (ReSukiSU default n, 必须显式开启;
+          # 该符号同时控制内核侧 fs/susfs.o 编译, 无独立 CONFIG_SUSFS)
           grep -q "^CONFIG_KSU=y" .config || {
             ./scripts/config --enable KSU
             make ARCH=arm64 LLVM=1 olddefconfig
@@ -113,11 +112,9 @@ jobs:
           ./scripts/config --set-val HZ 1000
           # 5. NR_CPUS 32 -> 8: bengal 仅 8 核, 减小 percpu 数组内存/cache 压力
           ./scripts/config --set-val NR_CPUS 8
-          # 6. PREEMPT_DYNAMIC: 运行时可在 full/voluntary 抢占间切换
-          ./scripts/config --enable PREEMPT_DYNAMIC
           make ARCH=arm64 LLVM=1 olddefconfig
-          # 验证关键项
-          grep -E "^CONFIG_KSU=|^CONFIG_KSU_SUSFS=|^CONFIG_KALLSYMS=|^CONFIG_KASAN=|^CONFIG_UBSAN=|^CONFIG_HZ=|^CONFIG_NR_CPUS=|^CONFIG_PREEMPT_DYNAMIC=" .config
+          # 验证关键项 (注: PREEMPT_DYNAMIC 为 6.x 特性, 5.15 无此符号)
+          grep -E "^CONFIG_KSU=|^CONFIG_KSU_SUSFS=|^CONFIG_KALLSYMS=|^CONFIG_KASAN=|^CONFIG_UBSAN=|^CONFIG_HZ=|^CONFIG_NR_CPUS=" .config
 
       - name: Build kernel Image
         run: |

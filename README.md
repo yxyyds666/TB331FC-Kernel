@@ -14,7 +14,7 @@
 ## 编译流程 (push 自动触发)
 
 1. 拉取谷歌官方 GKI 源码 `android13-5.15.167_r00` (与设备内核版本一致, KMI 兼容)
-2. 集成 KernelSU `main` (SusFS 补丁与之同步, KSU_VERSION>32513, 兼容最新 Manager 32525)
+2. 集成 **ReSukiSU** (最新版 KernelSU fork, v34993+, 兼容官方 Manager 32525, 内置 SusFS 适配, 多管理器支持)
 3. 集成 SusFS `gki-android13-5.15` 分支 (root 隐藏补丁, 与 KernelSU main 同步维护)
 4. 应用设备配置 `config.gz` + 性能优化 (关闭厂商工程调试项, 见下)
 5. `make LLVM=1` (clang 17) 编译 → `scripts/repack.py` 重打包 `boot.img` 上传 artifact
@@ -50,7 +50,8 @@ adb shell su -c "sh /data/local/tmp/tune.sh"
 
 ## 说明
 
-- KPM (Kernel Patch Module) 在原版 KernelSU v3.x 中已移除 (仅 SukiSU 等 fork 保留); SusFS 的隐藏模块走普通 KSU 模块方式, 不依赖 KPM。
+- 使用 **ReSukiSU** (基于 SukiSU-Ultra 的 fork): 内置 SusFS 适配 (`KSU_SUSFS`, inline hook 模式), 内核侧打 SusFS `50_add` 补丁后即可工作; 支持官方 KernelSU / RKSU / MKSU / SukiSU 多管理器。
+- **KPM 不在本内核中**: ReSukiSU 已移除 KernelPatch/KPM (kpm 目录与 CONFIG_KPM 均不存在); 如需 KPM 请改用 SukiSU-Ultra。
 
 ## 刷机
 
