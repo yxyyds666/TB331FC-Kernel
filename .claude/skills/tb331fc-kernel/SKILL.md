@@ -83,6 +83,41 @@ fastboot flash boot boot_a.img   # 仓库内原版镜像
 5. `PREEMPT_DYNAMIC` 是 6.x 特性,5.15 无此符号
 6. vendor config 含构建机绝对路径依赖 (`abi_symbollist.raw`),必须 `--undefine UNUSED_KSYMS_WHITELIST` + `--undefine TRIM_UNUSED_KSYMS`
 
+## Debug 分支 (调试内核)
+
+`debug` 分支与 main 共用同一管线,产出调试内核:完整日志 + SELinux 写死宽容。
+
+### 与 main 的差异 (workflow 中 IS_DEBUG 条件控制)
+
+| 项 | main | debug |
+|---|---|---|
+| 版本序列 | `vX.Y.Z` | `debug-vX.Y.Z` (bump 脚本前缀参数) |
+| 产物 | boot.img + AK3 zip | boot-debug.img + TB331FC-debug-AnyKernel3.zip |
+| config 附加 | — | 关 PANIC_ON_OOPS, LOG_BUF_SHIFT=19, DYNAMIC_DEBUG, DEBUG_ATOMIC_SLEEP |
+| cmdline | 空 | `androidboot.selinux=permissive enforcing=0` (repack.py --cmdline) |
+| Release | 正式 notes | 调试 notes + pstore 拉日志说明 |
+
+### Debug 构建操作
+
+```bash
+# 在 debug 分支上开发
+git checkout debug && git merge main   # 定期同步正式分支改动
+git push origin debug                  # 自动构建 + debug-vX.Y.Z Release
+```
+
+### 拉取启动日志 (刷入 debug 内核后)
+
+```bash
+adb shell cat /sys/fs/pstore/console-ramoops-0    # 崩溃/启动日志
+adb shell dmesg | grep -iE "error|fail|panic"
+adb shell cat /sys/kernel/debug/dynamic_debug/control
+```
+
+### repack.py 注意
+
+- `--cmdline "androidboot.selinux=permissive enforcing=0"` 写入 header cmdline 字段 (offset 44, 1536B)
+- 原版 cmdline 为空, 直接写入; 如需追加需手动拼接
+
 ## 常见故障排查
 
 | 症状 | 处理 |

@@ -97,6 +97,31 @@ adb shell su -c "sh /data/local/tmp/tune.sh"
 
 调度延迟收紧 + swappiness=100(配合 zram)+ page-cluster=8,重启失效,可做成 KernelSU 模块持久化。
 
+## 🐛 Debug 分支(调试内核)
+
+`debug` 分支产出**调试专用内核**:完整日志保留 + SELinux 写死宽容,用于启动失败定位、驱动调试。
+
+**与正式内核的差异**:
+
+| 项 | 正式 (main) | 调试 (debug) |
+|---|---|---|
+| Release | `vX.Y.Z` | `debug-vX.Y.Z`(独立版本序列) |
+| 产物 | `boot.img` + AK3 zip | `boot-debug.img` + `TB331FC-debug-AnyKernel3.zip` |
+| 内核日志 | 默认 | pstore/ramoops + 512KB 缓冲 + 全量动态调试 |
+| 崩溃行为 | oops 即重启 | **oops 不重启**(保留现场抓日志) |
+| SELinux | enforcing | **写死 permissive**(`androidboot.selinux=permissive enforcing=0`) |
+| `dmesg` 权限 | root | 普通用户可读 |
+
+**拉取启动日志**(刷入 debug 内核、重启后):
+
+```bash
+adb shell cat /sys/fs/pstore/console-ramoops-0   # 启动/崩溃内核日志
+adb shell dmesg | grep -iE "error|fail|panic"     # 当前日志
+adb shell cat /sys/kernel/debug/dynamic_debug/control  # 动态调试开关
+```
+
+> 调试完建议刷回正式内核(宽容模式关闭 Android 安全隔离)。
+
 ## ⚠️ 说明
 
 - **KPM 不含**:ReSukiSU 已移除 KernelPatch/KPM 机制;如需 KPM 请改用 SukiSU-Ultra 构建

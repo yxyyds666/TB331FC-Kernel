@@ -1,10 +1,11 @@
 name: Build GKI 5.15 + KernelSU
 
-# 每次 push 到 main 自动构建并发布 Release (版本号自动递增, 见 scripts/bump_version.sh)
+# main = 正式内核; debug = 调试内核 (完整日志 + SELinux 写死宽容)
+# 每次 push 自动构建并发布 Release (版本号自动递增, 见 scripts/bump_version.sh)
 # 手动触发可指定版本递增方式: patch=修补(默认) / minor=补丁 / major=重大更新
 on:
   push:
-    branches: [main]
+    branches: [main, debug]
   workflow_dispatch:
     inputs:
       bump:
@@ -20,6 +21,9 @@ permissions:
   contents: write
 
 env:
+  BRANCH: ${{ github.ref_name }}
+  IS_DEBUG: ${{ github.ref_name == 'debug' }}
+  DEBUG_PREFIX: ${{ github.ref_name == 'debug' && 'debug-' || '' }}
   # 谷歌官方 GKI 5.15 tag — 与设备原版内核 config.gz 的 5.15.167 对应
   GKI_TAG: android13-5.15.167_r00
   # ReSukiSU: 最新版 KSU (v34993+, 兼容官方 Manager 32525) + 内置 SusFS 适配
@@ -125,9 +129,18 @@ jobs:
           ./scripts/config --set-val HZ 1000
           # 5. NR_CPUS 32 -> 8: bengal 仅 8 核, 减小 percpu 数组内存/cache 压力
           ./scripts/config --set-val NR_CPUS 8
+          # === Debug 分支: 调试内核附加项 (正式分支不受影响) ===
+          if [ "$IS_DEBUG" = "true" ]; then
+            echo "[debug] 应用调试配置"
+            ./scripts/config --disable PANIC_ON_OOPS       # oops 不重启, 保留崩溃现场
+            ./scripts/config --set-val LOG_BUF_SHIFT 19    # 512KB 日志缓冲
+            ./scripts/config --enable DYNAMIC_DEBUG        # 全量动态调试
+            ./scripts/config --enable DEBUG_ATOMIC_SLEEP   # 原子上下文睡眠检测
+            ./scripts/config --disable SECURITY_DMESG_RESTRICT  # 允许非 root 读 dmesg
+          fi
           make ARCH=arm64 LLVM=1 olddefconfig
           # 验证关键项 (注: PREEMPT_DYNAMIC 为 6.x 特性, 5.15 无此符号)
-          grep -E "^CONFIG_KSU=|^CONFIG_KSU_SUSFS=|^CONFIG_KALLSYMS=|^CONFIG_KASAN=|^CONFIG_UBSAN=|^CONFIG_HZ=|^CONFIG_NR_CPUS=" .config
+          grep -E "^CONFIG_KSU=|^CONFIG_KSU_SUSFS=|^CONFIG_KALLSYMS=|^CONFIG_KASAN=|^CONFIG_UBSAN=|^CONFIG_HZ=|^CONFIG_NR_CPUS=|^CONFIG_PANIC_ON_OOPS=|^CONFIG_LOG_BUF_SHIFT=" .config
 
       - name: Build kernel Image
         run: |
@@ -138,10 +151,19 @@ jobs:
 
       - name: Repack boot.img
         run: |
-          python3 scripts/repack.py \
-            --input boot_a.img \
-            --kernel kernel/arch/arm64/boot/Image \
-            --output boot.img
+          if [ "$IS_DEBUG" = "true" ]; then
+            # Debug: 仅产出带宽容 cmdline 的调试内核
+            python3 scripts/repack.py \
+              --input boot_a.img \
+              --kernel kernel/arch/arm64/boot/Image \
+              --cmdline "androidboot.selinux=permissive enforcing=0" \
+              --output boot-debug.img
+          else
+            python3 scripts/repack.py \
+              --input boot_a.img \
+              --kernel kernel/arch/arm64/boot/Image \
+              --output boot.img
+          fi
 
       # AnyKernel3 刷机包: 设备端 (TWRP/Manager) 直接刷入, 无需电脑 fastboot
       - name: Package AnyKernel3 zip
@@ -150,34 +172,54 @@ jobs:
             https://github.com/WildKernels/AnyKernel3 AK3
           rm -rf AK3/.git
           cp kernel/arch/arm64/boot/Image AK3/Image
-          sed -i 's|kernel.string=.*|kernel.string=TB331FC KernelSU (ReSukiSU + SusFS)|' AK3/anykernel.sh
-          cd AK3 && zip -r ../TB331FC-AnyKernel3.zip ./* > /dev/null && cd ..
-          ls -la TB331FC-AnyKernel3.zip
+          if [ "$IS_DEBUG" = "true" ]; then
+            sed -i 's|kernel.string=.*|kernel.string=TB331FC DEBUG Kernel (ReSukiSU + SusFS + Selinux permissive)|' AK3/anykernel.sh
+            cd AK3 && zip -r ../TB331FC-debug-AnyKernel3.zip ./* > /dev/null && cd ..
+            ls -la TB331FC-debug-AnyKernel3.zip
+          else
+            sed -i 's|kernel.string=.*|kernel.string=TB331FC KernelSU (ReSukiSU + SusFS)|' AK3/anykernel.sh
+            cd AK3 && zip -r ../TB331FC-AnyKernel3.zip ./* > /dev/null && cd ..
+            ls -la TB331FC-AnyKernel3.zip
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: tb331fc-boot-ksu
+          name: tb331fc-${{ env.DEBUG_PREFIX }}boot-ksu
           path: |
-            boot.img
-            TB331FC-AnyKernel3.zip
+            boot${{ env.IS_DEBUG == 'true' && '-debug' || '' }}.img
+            TB331FC${{ env.IS_DEBUG == 'true' && '-debug' || '' }}-AnyKernel3.zip
             kernel/arch/arm64/boot/Image
             kernel/.config
           retention-days: 30
 
-      # 自动发布 Release: 版本号 x.x.x (重大更新.补丁.修补)
+      # 自动发布 Release: 版本号 x.x.x (重大更新.补丁.修补); debug 分支独立序列 debug-vX.Y.Z
       - name: Publish Release
         run: |
           BUMP="${{ inputs.bump || 'patch' }}"
-          VERSION=$(bash scripts/bump_version.sh "$BUMP")
-          echo "发布版本: v${VERSION} (bump=$BUMP)"
-          gh release create "v${VERSION}" \
-            boot.img \
-            TB331FC-AnyKernel3.zip \
-            kernel/arch/arm64/boot/Image \
-            --title "TB331FC Kernel v${VERSION}" \
-            --notes "KernelSU (ReSukiSU) + SusFS v2.2.0 内核
+          VERSION=$(bash scripts/bump_version.sh "$BUMP" "${DEBUG_PREFIX}")
+          echo "发布版本: ${VERSION} (bump=$BUMP)"
+          if [ "$IS_DEBUG" = "true" ]; then
+            gh release create "${VERSION}" \
+              boot-debug.img \
+              TB331FC-debug-AnyKernel3.zip \
+              kernel/arch/arm64/boot/Image \
+              --title "TB331FC DEBUG Kernel ${VERSION}" \
+              --notes "调试内核: ReSukiSU + SusFS v2.2.0 + SELinux 写死宽容
+
+          - 日志: pstore/ramoops + 512KB 缓冲 + 全量动态调试 + oops 不重启
+          - 宽容: androidboot.selinux=permissive enforcing=0 (开机即 permissive)
+          - 刷机: AK3 zip 设备端直接刷入, 或 fastboot flash boot boot-debug.img
+          - 拉日志: cat /sys/fs/pstore/console-ramoops-0"
+          else
+            gh release create "${VERSION}" \
+              boot.img \
+              TB331FC-AnyKernel3.zip \
+              kernel/arch/arm64/boot/Image \
+              --title "TB331FC Kernel ${VERSION}" \
+              --notes "KernelSU (ReSukiSU) + SusFS v2.2.0 内核
 
           - 内核: GKI android13-5.15.167 (与设备 stock KMI 一致)
           - 特性: KernelSU 349xx (多管理器, 兼容官方 Manager) + SusFS + 性能优化 (关 KASAN/UBSAN, HZ=1000, NR_CPUS=8)
           - 刷机: AK3 zip 设备端直接刷入, 或 fastboot flash boot boot.img"
+          fi

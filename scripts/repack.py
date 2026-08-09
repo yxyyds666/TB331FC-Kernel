@@ -31,6 +31,8 @@ def main() -> None:
     ap.add_argument("--kernel", required=True, help="新编译的内核 Image")
     ap.add_argument("--vendor-ramdisk", default=None,
                     help="vendor ramdisk (gzip cpio), 融合进 boot.img 供临时引导使用")
+    ap.add_argument("--cmdline", default=None,
+                    help="写入 boot header cmdline 字段 (如 androidboot.selinux=permissive enforcing=0)")
     ap.add_argument("--output", required=True, help="输出 boot.img")
     args = ap.parse_args()
 
@@ -56,6 +58,16 @@ def main() -> None:
     # 复制原 header(保留 os_version 等字段), 更新 kernel_size, 补零到页对齐
     header = bytearray(orig[:header_size])
     struct.pack_into("<I", header, 8, len(kernel))
+    # 可选: 写入 cmdline (v4: 位于 offset 44, 长 1536 字节, 原值为空)
+    if args.cmdline:
+        cmd_off = 44
+        cmd_len = 1536
+        data = args.cmdline.encode()
+        if len(data) >= cmd_len:
+            raise SystemExit(f"[ERROR] cmdline 过长 ({len(data)}B >= {cmd_len}B)")
+        header[cmd_off:cmd_off + cmd_len] = b"\x00" * cmd_len
+        header[cmd_off:cmd_off + len(data)] = data
+        print(f"[+] 已写入 cmdline: {args.cmdline}")
     out = bytearray(PAGE_SIZE)
     out[:header_size] = header
     out += kernel
