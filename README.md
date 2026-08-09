@@ -55,8 +55,15 @@ adb shell su -c "sh /data/local/tmp/tune.sh"
 
 ## 刷机
 
-1. 在仓库 Actions 页面下载最新 artifact 中的 `boot.img`
-2. 连接设备, 执行:
+artifact 提供两种产物, 任选其一:
+
+**方式 A: AnyKernel3 zip (推荐, 无需电脑)**
+
+1. 下载 `TB331FC-AnyKernel3.zip` (~23MB)
+2. 用 TWRP/OrangeFox 刷入, 或 KernelSU Manager → 刷入
+3. 重启完成
+
+**方式 B: boot.img (fastboot)**
 
 ```bash
 adb reboot bootloader

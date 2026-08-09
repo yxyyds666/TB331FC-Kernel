@@ -28,7 +28,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y git curl build-essential libssl-dev libelf-dev \
-            flex bison libncurses-dev dwarves python3 ccache
+            flex bison libncurses-dev dwarves python3 ccache zip
 
       - name: Download clang 17 (LLVM)
         run: |
@@ -130,12 +130,24 @@ jobs:
             --kernel kernel/arch/arm64/boot/Image \
             --output boot.img
 
+      # AnyKernel3 刷机包: 设备端 (TWRP/Manager) 直接刷入, 无需电脑 fastboot
+      - name: Package AnyKernel3 zip
+        run: |
+          git clone --depth 1 -b gki-2.0 \
+            https://github.com/WildKernels/AnyKernel3 AK3
+          rm -rf AK3/.git
+          cp kernel/arch/arm64/boot/Image AK3/Image
+          sed -i 's|kernel.string=.*|kernel.string=TB331FC KernelSU (ReSukiSU + SusFS)|' AK3/anykernel.sh
+          cd AK3 && zip -r ../TB331FC-AnyKernel3.zip ./* > /dev/null && cd ..
+          ls -la TB331FC-AnyKernel3.zip
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: tb331fc-boot-ksu
           path: |
             boot.img
+            TB331FC-AnyKernel3.zip
             kernel/arch/arm64/boot/Image
             kernel/.config
           retention-days: 30
