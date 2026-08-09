@@ -122,6 +122,10 @@ adb logcat -b crash -d                            # 应用崩溃
 | PELT 步骤 grep 失败 | 步骤 cwd 是 workspace 根, 路径写 `kernel/sched/sched-pelt.h` |
 | bootloop 排查 | 先刷 boot-main.img (最干净);仍 bootloop 则二分: 无 SusFS 仅 KSU 隔离版 |
 | Release 缺某变体 | publish job 检测三个 boot 文件齐全才发布, 缺失时查对应 build job 日志 |
+| 矩阵产物同名覆盖 | 三变体上传同名文件 (Image/.config) 会互相覆盖; 必须改名 Image-<variant> 后再上传 |
+| .config 上传无效 | upload-artifact v4 忽略隐藏文件; 需复制为 config-<variant> 非隐藏名 |
+| ccache 互相驱逐 | GitHub 单仓库 cache 上限 10GB, 矩阵三变体各 2G (18G 会持续互驱) |
+| publish 红叉 | 不需要 `if: always()`, needs 默认 build 全成功才运行 |
 
 ## 调试内核要点
 

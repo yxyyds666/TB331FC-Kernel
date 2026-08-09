@@ -148,19 +148,19 @@ jobs:
             ./scripts/config --enable ZRAM_DEF_COMP_ZSTD
           fi
           # === Debug 变体: 调试内核附加项 ===
+          # (注: pstore/ramoops 与 dmesg 权限原版 config 已具备, 无需在此配置)
           if [ "$VARIANT" = "debug" ]; then
             ./scripts/config --disable PANIC_ON_OOPS       # oops 不重启, 保留崩溃现场
             ./scripts/config --set-val LOG_BUF_SHIFT 19    # 512KB 日志缓冲
             ./scripts/config --enable DYNAMIC_DEBUG        # 全量动态调试
             ./scripts/config --enable DEBUG_ATOMIC_SLEEP   # 原子上下文睡眠检测
-            ./scripts/config --disable SECURITY_DMESG_RESTRICT  # 允许非 root 读 dmesg
           fi
           make ARCH=arm64 LLVM=1 olddefconfig
           grep -E "^CONFIG_KSU=|^CONFIG_KSU_SUSFS=|^CONFIG_KALLSYMS=|^CONFIG_KASAN=|^CONFIG_HZ=|^CONFIG_PANIC_ON_OOPS=" .config
 
       - name: Build kernel Image
         run: |
-          ccache --max-size=6G
+          ccache --max-size=2G   # 三变体并行, GitHub 单仓库 cache 上限 10GB, 2G/变体更实际
           cd kernel
           # 全局 -O3 (仅 feature 变体)
           if [ "$VARIANT" = "feature" ]; then
@@ -199,6 +199,12 @@ jobs:
           cd AK3 && zip -r "../TB331FC-${VARIANT}-AnyKernel3.zip" ./* > /dev/null && cd ..
           ls -la *.img *.zip
 
+      - name: Prepare variant files
+        run: |
+          # 改名后上传, 避免三变体同名文件 (Image/.config) 互相覆盖;
+          # 同时规避 upload-artifact v4 忽略隐藏文件 (.config) 的问题
+          cp kernel/arch/arm64/boot/Image "Image-${VARIANT}"
+          cp kernel/.config "config-${VARIANT}"
       - name: Upload variant artifact
         uses: actions/upload-artifact@v4
         with:
@@ -206,15 +212,15 @@ jobs:
           path: |
             boot-${{ env.VARIANT }}.img
             TB331FC-${{ env.VARIANT }}-AnyKernel3.zip
-            kernel/arch/arm64/boot/Image
-            kernel/.config
+            Image-${{ env.VARIANT }}
+            config-${{ env.VARIANT }}
           retention-days: 30
 
   # 汇总三个变体产物, 发布为单个 Release
+  # needs 默认语义: build 全部成功才运行, 失败自动跳过 (不留红叉)
   publish:
     needs: [build]
     runs-on: ubuntu-22.04
-    if: always() && !cancelled()
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
