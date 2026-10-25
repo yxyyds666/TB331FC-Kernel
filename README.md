@@ -2,11 +2,11 @@
 
 小新Pad 2024 (TB331FC) 定制内核 —— **ReKernel** 系列
 
-基于谷歌原版 **GKI 5.15.167** 编译,集成**原版 KernelSU** + **SusFS 2.2.0**。GitHub Actions 矩阵云编译,每次发布**单个 Release 含三个变体**(main / debug / feature)。
+基于谷歌原版 **GKI 5.15.211** 编译,集成**原版 KernelSU** + **SusFS 2.2.0**。GitHub Actions 矩阵云编译,每次发布**单个 Release 含三个变体**(main / debug / feature)。
 
 ## ✨ 特性
 
-- **内核**:谷歌官方 GKI `android13-5.15.167_r00`(与设备 stock KMI 完全一致,vendor 模块兼容)
+- **内核**:谷歌官方 GKI `android13-5.15.211_r00`(与设备 stock 同属 android13-5.15 冻结 KMI,vendor 模块兼容;含 5.15.167→5.15.211 LTS 安全修复,SusFS 分支已同步 rebase 至 .211)
 - **原版 KernelSU**(325xx+,兼容官方 Manager):内核级 root
 - **SusFS 2.2.0**:root 隐藏内核补丁(挂载伪装、路径隐藏、uname 伪装、打开重定向等)
 - **三变体单 Release**:一次发布同时提供 正式 / 调试 / 实验 三种内核,按需选择
@@ -19,7 +19,7 @@
 | `boot-debug.img` / `TB331FC-debug-AnyKernel3.zip` | debug | main + 调试日志(512KB 缓冲、全量动态调试、oops 不重启),问题定位用 |
 | `boot-feature.img` / `TB331FC-feature-AnyKernel3.zip` | feature | main + **实验性优化**(-O3 编译、PELT 16ms、zram zstd、HZ=1000、关 KASAN),不稳定,仅供测试 |
 
-> 三个变体共用同一 GKI 5.15.167 内核与 KMI,可互相替换刷入。
+> 三个变体共用同一 GKI 5.15.211 内核与 KMI,可互相替换刷入。
 > 仓库内 `boot_a.img`(96MiB,回滚用)是 CI repack 的输入,保留在 git 中(接近 GitHub 100MiB 限制,未启用 LFS)。
 
 ## 🔧 刷机
@@ -90,7 +90,7 @@ gh release list --repo yxyyds666/TB331FC-Kernel
 ## ⚙️ 编译管线 (每个变体)
 
 ```
-GKI android13-5.15.167_r00
+GKI android13-5.15.211_r00
 → 原版 KernelSU (main) + SusFS (10_enable + 50_add 补丁)
 → [feature] PELT 16ms 补丁
 → config.gz + 构建修复 + [feature] 性能项 + [debug] 调试项

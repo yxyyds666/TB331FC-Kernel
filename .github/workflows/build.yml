@@ -27,8 +27,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # 谷歌官方 GKI 5.15 tag — 与设备原版内核 config.gz 的 5.15.167 对应
-  GKI_TAG: android13-5.15.167_r00
+  # 谷歌官方 GKI 5.15 tag — SusFS gki-android13-5.15 分支 2026-10 已 rebase 到 5.15.211,
+  # 补丁上下文只对 .211 干净适用 (对 .167 会在 fs/namespace.c 与 fs/proc/task_mmu.c 拒绝);
+  # android13-5.15 KMI 冻结, 同分支升级与设备厂商模块兼容, 设备原版 config.gz 用 olddefconfig 迁移
+  GKI_TAG: android13-5.15.211_r00
   # 原版 KernelSU main 分支: SusFS gki-android13-5.15 分支与之持续同步, 补丁完全匹配
   KSU_TAG: main
   KSU_REPO: tiann/KernelSU
